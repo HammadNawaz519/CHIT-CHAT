@@ -436,8 +436,9 @@ body {
   padding: 6px 12px;
   border-radius: 12px;
   font-size: 0.9rem;
-  max-width: 60%;
+  max-width: 85%;
   margin: 4px 0;
+  white-space: nowrap;
 }
 .call-record svg {
   width: 18px;
@@ -1078,6 +1079,11 @@ body {
     font-weight: 600;
   }
 
+  .call-record {
+    max-width: 85%;
+    white-space: nowrap;
+  }
+
   /* Premium Floating Footer */
   .footer {
     position: fixed;
@@ -1294,6 +1300,11 @@ font-size: 0.95rem;
     padding: 12px 16px;
     border-radius: 20px;
     font-size: 0.95rem;
+  }
+
+  .call-record {
+    max-width: 88%;
+    white-space: nowrap;
   }
 
   .footer {
@@ -2132,9 +2143,16 @@ font-size: 0.95rem;
             // phone icon
             const icon = `<svg viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>`;
             let message = data.message || '';
-            let [typeText, duration] = message.split('–').map(s => s.trim());
-            if (!duration) duration = '';
-            const textHtml = `<div class="call-text"><div class="call-type">${typeText}</div><div class="call-duration">${duration}</div></div>`;
+            let typeText = message;
+            let duration = '';
+            // Only split if message contains the old format with duration
+            if (message.includes('–')) {
+                [typeText, duration] = message.split('–').map(s => s.trim());
+            }
+            // If there's a duration, show both parts; otherwise show message in one line
+            const textHtml = duration 
+                ? `<div class="call-text"><div class="call-type">${typeText}</div><div class="call-duration">${duration}</div></div>`
+                : `<div class="call-text"><div class="call-type">${typeText}</div></div>`;
             rec.innerHTML = icon + textHtml;
             div.appendChild(rec);
         } else {

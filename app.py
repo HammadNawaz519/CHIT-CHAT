@@ -701,8 +701,24 @@ def handle_call_ended(data):
         if rec and rec.get('caller') and rec.get('callee'):
             end = datetime.utcnow()
             duration = int((end - rec['start']).total_seconds())
-            msg_text = f"{rec['type'].capitalize()} call - {duration}s"
-            app.logger.info(f'[CALL_ENDED] inserting: caller={rec["caller"]}, callee={rec["callee"]}, duration={duration}')
+            
+            # Determine call message based on connection status
+            was_connected = data.get('was_connected', False)
+            if was_connected:
+                # Call was accepted and completed - include duration
+                # Format duration as "1m 30s" or "45s"
+                if duration >= 60:
+                    mins = duration // 60
+                    secs = duration % 60
+                    duration_str = f"{mins}m {secs}s" if secs > 0 else f"{mins}m"
+                else:
+                    duration_str = f"{duration}s"
+                msg_text = f"{rec['type'].capitalize()} Call - {duration_str}"
+            else:
+                # Call was not accepted
+                msg_text = "Call not accepted"
+            
+            app.logger.info(f'[CALL_ENDED] inserting: caller={rec["caller"]}, callee={rec["callee"]}, duration={duration}, was_connected={was_connected}, msg={msg_text}')
             
             try:
                 db = get_db()

@@ -24,15 +24,15 @@
       --white:    #FFFFFF;
       --card-radius: 40px;
 
-      /* call-specific overrides */
-      --call-bg:   #2A2E3E;
-      --call-dark: #1F2232;
-      --glass:        rgba(255,255,255,0.1);
-      --glass-border: rgba(255,255,255,0.08);
+      /* call-specific overrides - simplified colors */
+      --call-bg:   #1F1F1F;
+      --call-dark: #2A2A2A;
+      --glass:        rgba(255,255,255,0.08);
+      --glass-border: rgba(255,255,255,0.05);
       --blur:         24px;
       --danger:       #FF3B30;
       --success:      #34C759;
-      --shadow:       0 4px 12px rgba(0,0,0,0.3);
+      --shadow:       0 2px 8px rgba(0,0,0,0.2);
     }
 
     * {
@@ -55,11 +55,7 @@
       background: var(--call-bg);
       z-index: 0; overflow: hidden;
     }
-    .glow { position: absolute; border-radius: 50%; filter: blur(90px); }
-    .glow-a { width: 500px; height: 500px; background: radial-gradient(circle, #5B21B6 0%, transparent 70%); top: -150px; right: -150px; opacity: 0; animation: gab 9s ease-in-out infinite alternate; }
-    .glow-b { width: 400px; height: 400px; background: radial-gradient(circle, #1E3A5F 0%, transparent 70%); bottom: -100px; left: -120px; opacity: 0; animation: gab 12s ease-in-out infinite alternate-reverse; }
-    .glow-c { width: 250px; height: 250px; background: radial-gradient(circle, #BE185D 0%, transparent 70%); bottom: 40%; right: 20%; opacity: 0; animation: gab 7s ease-in-out 2s infinite alternate; }
-    @keyframes gab { from { transform: translate(0,0) scale(1); } to { transform: translate(50px,-50px) scale(1.15); } }
+    .glow { display: none; }
 
     /* ===== REMOTE VIDEO ===== */
     #remoteVideo {
@@ -86,7 +82,7 @@
       transition: box-shadow 0.2s;
     }
     #localWrap.audio-only { display: none !important; }
-    #localWrap:hover { box-shadow: 0 12px 48px rgba(0,0,0,0.7), 0 0 0 3px rgba(225,217,188,0.35); }
+    #localWrap:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
     #localVideo {
       width: 100%; height: 100%;
       object-fit: cover;
@@ -94,9 +90,9 @@
     }
     .no-cam-local {
       width: 100%; height: 100%;
-      background: #3A4050;
+      background: #2A2A2A;
       display: flex; align-items: center; justify-content: center;
-      color: rgba(255,255,255,0.4); font-size: 2.4rem;
+      color: rgba(255,255,255,0.3); font-size: 2.4rem;
     }
     @media (max-width: 600px) {
       #localWrap { width: 96px; height: 128px; border-radius: 16px; bottom: 148px; right: 14px; }
@@ -140,12 +136,12 @@
     .peer-avatar {
       width: 100px; height: 100px; border-radius: 50%;
       position: relative; z-index: 2;
-      border: 2px solid rgba(255,255,255,0.2);
-      background: #3A4050;
+      border: 2px solid rgba(255,255,255,0.15);
+      background: #2A2A2A;
       overflow: hidden;
       display: flex; align-items: center; justify-content: center;
       font-size: 2.8rem; font-weight: 800; color: #FFFFFF;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
     }
     .peer-avatar img { width: 100%; height: 100%; object-fit: cover; }
 
@@ -165,7 +161,7 @@
     #topBar {
       position: fixed; top: 0; left: 0; right: 0;
       padding: calc(env(safe-area-inset-top, 0px) + 20px) 24px 20px;
-      background: linear-gradient(to bottom, rgba(42,46,62,0.6) 0%, transparent 100%);
+      background: rgba(31, 31, 31, 0.7);
       z-index: 25;
       display: flex; flex-direction: column; align-items: center;
       pointer-events: none;
@@ -182,7 +178,7 @@
     #controls {
       position: fixed; bottom: 0; left: 0; right: 0;
       padding: 20px 32px calc(env(safe-area-inset-bottom, 0px) + 24px);
-      background: linear-gradient(to top, rgba(42,46,62,0.6) 0%, transparent 100%);
+      background: rgba(31, 31, 31, 0.7);
       z-index: 25;
       display: flex; flex-direction: column; align-items: center; gap: 16px;
       transition: opacity 0.4s ease, transform 0.4s ease;
@@ -202,14 +198,14 @@
 
     .ctrl-ico {
       width: 64px; height: 64px; border-radius: 50%;
-      /* button background for dark theme */
-      background: #3A4050;
+      /* button background for minimal theme */
+      background: #333333;
       display: flex; align-items: center; justify-content: center;
       transition: all 0.3s cubic-bezier(0.175,0.885,0.32,1.275);
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
     }
     .ctrl-ico svg { width: 26px; height: 26px; transition: all 0.2s; }
-    .ctrl:hover .ctrl-ico { background: rgba(60,70,85,0.9); transform: scale(1.06); }
+    .ctrl:hover .ctrl-ico { background: #404040; transform: scale(1.06); }
 
     /* OFF state (muted / camera off / speaker off) */
     .ctrl.off .ctrl-ico {
@@ -224,7 +220,7 @@
       width: 76px; height: 76px;
       background: var(--danger);
       border-color: transparent;
-      box-shadow: 0 8px 30px rgba(255,59,48,0.55), 0 2px 8px rgba(0,0,0,0.3);
+      box-shadow: 0 4px 12px rgba(255,59,48,0.3), 0 2px 6px rgba(0,0,0,0.2);
     }
     #endBtn:hover .ctrl-ico { background: #e02010; transform: scale(1.08); }
     #endBtn:active .ctrl-ico { transform: scale(0.93); }
@@ -242,24 +238,24 @@
       position: fixed; inset: 0; z-index: 60;
       display: flex; flex-direction: column;
       align-items: center; justify-content: center; gap: 18px;
-      background: rgba(13,13,15,0.88);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
+      background: rgba(31, 31, 31, 0.95);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
       transition: opacity 0.4s ease;
     }
     #statusOverlay.gone { opacity: 0; pointer-events: none; }
 
     .ov-icon {
       width: 88px; height: 88px; border-radius: 50%;
-      background: var(--glass); border: 1px solid var(--glass-border);
+      background: #2A2A2A; border: 1px solid rgba(255,255,255,0.08);
       display: flex; align-items: center; justify-content: center;
     }
     .ov-icon svg { width: 38px; height: 38px; }
 
     .ov-spin {
       width: 88px; height: 88px; border-radius: 50%;
-      border: 3px solid rgba(255,255,255,0.1);
-      border-top-color: rgba(225,217,188,0.8);
+      border: 3px solid rgba(255,255,255,0.08);
+      border-top-color: rgba(255,255,255,0.5);
       animation: spin 1s linear infinite;
       display: none;
     }
@@ -297,89 +293,7 @@
     /* ===== DRAGGABLE PIP helper ===== */
     #localWrap { transition: none; }
 
-    /* ===== CALL CHAT PANEL ===== */
-    #callChatPanel {
-      position: fixed; right: 0; top: 0; bottom: 0;
-      width: 320px; max-width: 90vw;
-      background: linear-gradient(to bottom, rgba(42,46,62,0.95), rgba(31,34,50,0.98));
-      backdrop-filter: blur(12px);
-      border-left: 1px solid rgba(255,255,255,0.1);
-      z-index: 22;
-      display: flex; flex-direction: column;
-      transform: translateX(100%);
-      transition: transform 0.3s ease;
-      box-shadow: -4px 0 16px rgba(0,0,0,0.4);
-    }
-    #callChatPanel.visible { transform: translateX(0); }
-    
-    #chatPanelHeader {
-      padding: 16px; border-bottom: 1px solid rgba(255,255,255,0.1);
-      display: flex; justify-content: space-between; align-items: center;
-      flex-shrink: 0;
-    }
-    #chatPanelHeader h3 { font-size: 0.95rem; font-weight: 700; color: #FFFFFF; }
-    #closeChatBtn {
-      background: none; border: none; cursor: pointer;
-      color: rgba(255,255,255,0.6); font-size: 1.5rem;
-      padding: 4px 8px; transition: color 0.2s;
-    }
-    #closeChatBtn:hover { color: rgba(255,255,255,0.9); }
-    
-    #messagesContainer {
-      flex: 1; overflow-y: auto; padding: 12px;
-      display: flex; flex-direction: column; gap: 8px;
-    }
-    .call-msg {
-      padding: 8px 12px; border-radius: 12px; max-width: 85%;
-      font-size: 0.85rem; word-wrap: break-word;
-      animation: msgPop 0.3s ease;
-    }
-    .call-msg.sent {
-      background: rgba(225,217,188,0.25); color: #fff;
-      align-self: flex-end; border-bottom-right-radius: 4px;
-    }
-    .call-msg.received {
-      background: rgba(255,255,255,0.1); color: #fff;
-      align-self: flex-start; border-bottom-left-radius: 4px;
-    }
-    @keyframes msgPop { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
-    
-    #chatInputArea {
-      padding: 12px; border-top: 1px solid rgba(255,255,255,0.1);
-      display: flex; gap: 8px; flex-shrink: 0;
-    }
-    #callChatInput {
-      flex: 1; padding: 8px 12px; border-radius: 20px;
-      background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.12);
-      color: #fff; font-size: 0.85rem;
-      outline: none; transition: all 0.2s;
-    }
-    #callChatInput:focus { background: rgba(255,255,255,0.12); border-color: rgba(225,217,188,0.3); }
-    #callChatInput::placeholder { color: rgba(255,255,255,0.4); }
-    #sendChatBtn {
-      background: rgba(225,217,188,0.2); border: none; border-radius: 50%;
-      width: 36px; height: 36px; cursor: pointer; color: rgba(225,217,188,0.8);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 1.1rem; transition: all 0.2s;
-    }
-    #sendChatBtn:hover { background: rgba(225,217,188,0.3); }
-    #sendChatBtn:active { transform: scale(0.9); }
-    
-    #toggleChatBtn {
-      position: fixed; bottom: 80px; right: 20px; z-index: 21;
-      width: 56px; height: 56px; border-radius: 50%;
-      background: rgba(225,217,188,0.2); border: 1px solid rgba(225,217,188,0.3);
-      color: rgba(225,217,188,0.9); cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 1.4rem; transition: all 0.2s;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    }
-    #toggleChatBtn:hover { background: rgba(225,217,188,0.3); }
-    #toggleChatBtn:active { transform: scale(0.9); }
-    
-    #callChatPanel.visible ~ #toggleChatBtn {
-      display: none;
-    }
+
   </style>
 </head>
 <body>
@@ -516,31 +430,7 @@
     <button onclick="window.close()">Close Window</button>
   </div>
 
-  <!-- CHAT PANEL DURING CALL -->
-  <div id="callChatPanel">
-    <div id="chatPanelHeader">
-      <h3>Chat</h3>
-      <button id="closeChatBtn" onclick="toggleCallChat()">&times;</button>
-    </div>
-    <div id="messagesContainer">
-      <!-- Messages appear here -->
-    </div>
-    <div id="chatInputArea">
-      <input id="callChatInput" type="text" placeholder="Type a message..." autocomplete="off">
-      <button id="sendChatBtn" onclick="sendCallMessage()">
-        <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18">
-          <path d="M16.6914026,12.4744748 L3.50612381,13.2599618 C3.19218622,13.2599618 3.03521743,13.4170592 3.03521743,13.5741566 L1.15159189,20.0151496 C0.8376543,20.8006365 0.99,21.89 1.77946707,22.52 C2.40296957,22.99 3.50612381,23.1 4.13399899,22.8429026 L21.714504,14.0454487 C22.6563168,13.5741566 23.1272231,12.6315722 22.9702544,11.6889879 C22.9702544,11.6889879 22.9702544,11.3749715 22.9702544,11.2178741 L22.9702544,10.9037578 C23.1272231,9.961375 22.6563168,9.01879065 21.714504,8.54748856 L4.13399899,0 C3.50612381,-0.156097568 2.40296957,0 1.77946707,0.468309346 C0.994623095,1.10303685 0.8376543,2.0456211 1.15159189,2.99700541 L3.03521743,9.43799849 C3.03521743,9.59509592 3.19218622,9.75219335 3.50612381,9.75219335 L16.6914026,10.5376803 C16.6914026,10.5376803 17.1623089,10.5376803 17.1623089,10.0663883 L17.1623089,11.1604515 C17.1623089,11.3175489 17.1623089,11.6315722 16.6914026,11.6315722 C16.6914026,11.6315722 16.0635274,11.6315722 16.6914026,12.4744748 Z"/>
-        </svg>
-      </button>
-    </div>
-  </div>
 
-  <!-- CHAT TOGGLE BUTTON -->
-  <button id="toggleChatBtn" onclick="toggleCallChat()">
-    <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22">
-      <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/>
-    </svg>
-  </button>
 
   <!-- =============================================
        SCRIPTS
@@ -567,6 +457,8 @@
     let isMuted         = false;
     let isCamOff        = false;
     let isSpeakerOff    = false;
+    let isSpeakerMode   = true;  // true = speaker, false = earpiece (mobile only)
+    let isMobile        = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     let callStartTime   = null;
     let timerInterval   = null;
     let ctrlTimeout     = null;
@@ -974,14 +866,82 @@
     }
 
     function toggleSpeaker() {
-      isSpeakerOff = !isSpeakerOff;
-      const el = CALL_TYPE === 'video' ? remoteVideo : remoteAudio;
-      el.muted = isSpeakerOff;
-      document.getElementById('spkBtn').classList.toggle('off', isSpeakerOff);
-      document.getElementById('spkLbl').textContent = isSpeakerOff ? 'Unmute' : 'Speaker';
-      document.getElementById('spkIco').innerHTML = isSpeakerOff
-        ? `<path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>`
-        : `<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>`;
+      // For mobile: switch between speaker and earpiece
+      // For desktop: Speaker / No Voice (not mute/unmute)
+      if (isMobile) {
+        isSpeakerMode = !isSpeakerMode;
+        const el = CALL_TYPE === 'video' ? remoteVideo : remoteAudio;
+        
+        // Try to route audio to speaker or earpiece
+        if (isSpeakerMode) {
+          // Route to speaker (loudspeaker)
+          routeAudioToSpeaker(el);
+          document.getElementById('spkBtn').classList.remove('off');
+          document.getElementById('spkLbl').textContent = 'Speaker';
+          // Loudspeaker icon
+          document.getElementById('spkIco').innerHTML = `<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>`;
+        } else {
+          // Route to earpiece
+          routeAudioToEarpiece(el);
+          document.getElementById('spkBtn').classList.add('off');
+          document.getElementById('spkLbl').textContent = 'Earpiece';
+          // Phone receiver/earpiece icon
+          document.getElementById('spkIco').innerHTML = `<path d="M17 10.5H7c-.55 0-1 .45-1 1v.36c0 .32-.08.63-.23.9.15.27.23.58.23.9v2.88c0 .32-.08.63-.23.9.15.27.23.58.23.9V18c0 .55.45 1 1 1h10c.55 0 1-.45 1-1v-.36c0-.32.08-.63.23-.9-.15-.27-.23-.58-.23-.9v-2.88c0-.32.08-.63.23-.9-.15-.27-.23-.58-.23-.9V11.5c0-.55-.45-1-1-1zm-3.5 7c0 .83-.67 1.5-1.5 1.5s-1.5-.67-1.5-1.5.67-1.5 1.5-1.5 1.5.67 1.5 1.5z"/>`;
+        }
+      } else {
+        // Desktop: Speaker / No Voice
+        isSpeakerOff = !isSpeakerOff;
+        const el = CALL_TYPE === 'video' ? remoteVideo : remoteAudio;
+        el.muted = isSpeakerOff;
+        document.getElementById('spkBtn').classList.toggle('off', isSpeakerOff);
+        document.getElementById('spkLbl').textContent = isSpeakerOff ? 'No Voice' : 'Speaker';
+        document.getElementById('spkIco').innerHTML = isSpeakerOff
+          ? `<path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>`
+          : `<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>`;
+      }
+    }
+
+    // Route audio to loudspeaker (for mobile)
+    function routeAudioToSpeaker(audioEl) {
+      if (!audioEl) return;
+      
+      // Try setSinkId for Chrome/Edge (speaker output)
+      if (audioEl.setSinkId) {
+        audioEl.setSinkId('').catch(err => console.log('Speaker routing:', err));
+      }
+      
+      // Ensure not muted
+      audioEl.muted = false;
+      
+      // Try to set audio to default output
+      try {
+        if (audioEl.play) audioEl.play().catch(e => {});
+      } catch (e) {}
+    }
+
+    // Route audio to earpiece (for mobile)
+    function routeAudioToEarpiece(audioEl) {
+      if (!audioEl) return;
+      
+      // Try setSinkId for Chrome/Edge (earpiece - typically device 'default')
+      if (audioEl.setSinkId) {
+        // Use receiver constraint to route to earpiece
+        const constraints = {
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          }
+        };
+        audioEl.setSinkId('default').catch(err => console.log('Earpiece routing:', err));
+      }
+      
+      // Ensure not muted
+      audioEl.muted = false;
+      
+      try {
+        if (audioEl.play) audioEl.play().catch(e => {});
+      } catch (e) {}
     }
 
     // ─── CALL CHAT FUNCTIONS ──────────────────────────────────────────────────
@@ -1049,7 +1009,9 @@
       if (callEnded) return;
       callEnded = true;
 
-      if (notify) socket.emit('call_ended', { room: CALL_ROOM });
+      // Send connection status to backend for proper call record message
+      const wasConnected = callIsConnected || (pc && (pc.connectionState === 'connected' || pc.iceConnectionState === 'connected'));
+      if (notify) socket.emit('call_ended', { room: CALL_ROOM, was_connected: wasConnected });
 
       stopRingTone();
       stopTimer();
