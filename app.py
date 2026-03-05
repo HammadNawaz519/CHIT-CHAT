@@ -29,6 +29,7 @@ app.secret_key = os.getenv("SECRET_KEY")
 # /login.
 
 app.config['SESSION_PERMANENT'] = False
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100 MB upload limit
 # you can also customise the lifetime in case you want automatic
 # expiration while the browser is still open:
 # from datetime import timedelta
@@ -36,9 +37,13 @@ app.config['SESSION_PERMANENT'] = False
 
 # ---------------- SOCKET.IO INITIALIZATION ----------------
 # SINGLE, CLEAN INITIALIZATION - avoids duplicate re-init issues
+_cors_origins = os.getenv("CORS_ORIGINS", "*")
+if _cors_origins != "*":
+    _cors_origins = [o.strip() for o in _cors_origins.split(",")]
+
 socketio = SocketIO(
     app,
-    cors_allowed_origins="*",
+    cors_allowed_origins=_cors_origins,
     manage_session=False,
     max_http_buffer_size=10000000
 )
