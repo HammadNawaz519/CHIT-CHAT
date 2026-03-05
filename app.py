@@ -100,6 +100,196 @@ def send_otp(email):
 def get_room_name(user1, user2):
     return f"chat_{min(user1, user2)}_{max(user1, user2)}"
 
+# ---------------- DATABASE INIT ----------------
+def init_db():
+    """Create missing tables and columns on startup."""
+    try:
+        db = get_db()
+        cursor = db.cursor()
+        try:
+            cursor.execute(
+                "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS "
+                "WHERE TABLE_SCHEMA=%s AND TABLE_NAME='messages' AND COLUMN_NAME='deleted_for_everyone'",
+                (os.getenv('DB_NAME'),))
+            if not cursor.fetchone():
+                cursor.execute("ALTER TABLE messages ADD COLUMN deleted_for_everyone TINYINT DEFAULT 0")
+        except Exception:
+            pass
+        try:
+            cursor.execute(
+                "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS "
+                "WHERE TABLE_SCHEMA=%s AND TABLE_NAME='users' AND COLUMN_NAME='bio'",
+                (os.getenv('DB_NAME'),))
+            if not cursor.fetchone():
+                cursor.execute("ALTER TABLE users ADD COLUMN bio TEXT")
+        except Exception:
+            pass
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS message_deletions (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                message_id INT NOT NULL,
+                user_id INT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_del (message_id, user_id)
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS message_reactions (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                message_id INT NOT NULL,
+                user_id INT NOT NULL,
+                emoji VARCHAR(10) NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_react (message_id, user_id, emoji)
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS notifications (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                type VARCHAR(20) NOT NULL,
+                from_user_id INT,
+                reference_id INT,
+                content TEXT,
+                is_read TINYINT DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_notif_user (user_id),
+                INDEX idx_notif_unread (user_id, is_read)
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS statuses (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                media_url TEXT NOT NULL,
+                media_type VARCHAR(10) NOT NULL,
+                caption TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expires_at DATETIME,
+                INDEX idx_status_user (user_id),
+                INDEX idx_status_expires (expires_at)
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS status_views (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                status_id INT NOT NULL,
+                user_id INT NOT NULL,
+                viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_status_view (status_id, user_id)
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS reels (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                video_url TEXT NOT NULL,
+                caption TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_reel_user (user_id)
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS reel_likes (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                reel_id INT NOT NULL,
+                user_id INT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_reel_like (reel_id, user_id)
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS songs (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                audio_url TEXT NOT NULL,
+                title VARCHAR(200),
+                artist VARCHAR(200),
+                cover_url TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_song_user (user_id)
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS song_likes (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                song_id INT NOT NULL,
+                user_id INT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_song_like (song_id, user_id)
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS reel_comments (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                reel_id INT NOT NULL,
+                user_id INT NOT NULL,
+                comment TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_rc_reel (reel_id)
+            )
+        """)
+        # Add bio column if it doesn't exist yet
+        try:
+            cursor.execute("ALTER TABLE users ADD COLUMN bio TEXT DEFAULT NULL")
+        except Exception:
+            pass
+        # Add reply columns to messages
+        for col, defn in [('reply_to_id', 'INT DEFAULT NULL'), ('reply_preview', 'TEXT DEFAULT NULL')]:
+            try:
+                cursor.execute(
+                    "SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS "
+                    "WHERE TABLE_SCHEMA=%s AND TABLE_NAME='messages' AND COLUMN_NAME=%s",
+                    (os.getenv('DB_NAME'), col))
+                if not cursor.fetchone():
+                    cursor.execute(f"ALTER TABLE messages ADD COLUMN {col}")
+            except Exception:
+                pass
+        # Follows table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS follows (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                follower_id INT UNSIGNED NOT NULL,
+                following_id INT UNSIGNED NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_follow (follower_id, following_id),
+                INDEX idx_follower (follower_id),
+                INDEX idx_following (following_id)
+            ) ENGINE=InnoDB
+        """)
+        # Blocks table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS blocks (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                blocker_id INT UNSIGNED NOT NULL,
+                blocked_id INT UNSIGNED NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_block (blocker_id, blocked_id),
+                INDEX idx_blocker (blocker_id),
+                INDEX idx_blocked (blocked_id)
+            ) ENGINE=InnoDB
+        """)
+        # Posts table (permanent image/video posts)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS posts (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                media_url TEXT NOT NULL,
+                media_type VARCHAR(10) NOT NULL,
+                caption TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_post_user (user_id)
+            ) ENGINE=InnoDB
+        """)
+        db.commit()
+        cursor.close()
+        db.close()
+        app.logger.info('init_db completed successfully')
+    except Exception as e:
+        app.logger.warning(f'init_db error: {e}')
+
+init_db()
+
 # ---------------- GOOGLE VERIFICATION ----------------
 ####################################################################
 # FUNCTION: google_verify
@@ -228,7 +418,24 @@ def register():
 
 #-----------------PROFILE-----------------------
 UPLOAD_FOLDER_PFP = os.path.join('static', 'uploads', 'profile_pics')
+UPLOAD_FOLDER_STATUS = os.path.join('static', 'uploads', 'statuses')
+UPLOAD_FOLDER_REELS = os.path.join('static', 'uploads', 'reels')
+UPLOAD_FOLDER_SONGS = os.path.join('static', 'uploads', 'songs')
+UPLOAD_FOLDER_COVERS = os.path.join('static', 'uploads', 'song_covers')
+UPLOAD_FOLDER_POSTS = os.path.join('static', 'uploads', 'images')
 os.makedirs(UPLOAD_FOLDER_PFP, exist_ok=True)
+os.makedirs(UPLOAD_FOLDER_STATUS, exist_ok=True)
+os.makedirs(UPLOAD_FOLDER_REELS, exist_ok=True)
+os.makedirs(UPLOAD_FOLDER_SONGS, exist_ok=True)
+os.makedirs(UPLOAD_FOLDER_COVERS, exist_ok=True)
+os.makedirs(UPLOAD_FOLDER_POSTS, exist_ok=True)
+
+ALLOWED_IMAGE_EXT = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
+ALLOWED_VIDEO_EXT = {'mp4', 'webm', 'mov'}
+ALLOWED_AUDIO_EXT = {'mp3', 'wav', 'ogg', 'aac', 'm4a', 'webm'}
+
+def allowed_file(filename, allowed_exts):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_exts
 
 ####################################################################
 # FUNCTION: update_profile
@@ -272,19 +479,33 @@ def update_profile():
 def profile():
     if not session.get('user_id'):
         return redirect('/login')
-        
+
     db = get_db()
     cursor = db.cursor(dictionary=True)
     cursor.execute("SELECT * FROM users WHERE id = %s", (session['user_id'],))
     user = cursor.fetchone()
+    cursor.execute("SELECT COUNT(*) as cnt FROM reels WHERE user_id = %s", (session['user_id'],))
+    reel_count = cursor.fetchone()['cnt']
+    cursor.execute("SELECT COUNT(*) as cnt FROM posts WHERE user_id = %s", (session['user_id'],))
+    post_count = cursor.fetchone()['cnt']
+    cursor.execute("SELECT COUNT(*) as cnt FROM follows WHERE following_id = %s", (session['user_id'],))
+    follower_count = cursor.fetchone()['cnt']
+    cursor.execute("SELECT COUNT(*) as cnt FROM follows WHERE follower_id = %s", (session['user_id'],))
+    following_count = cursor.fetchone()['cnt']
     cursor.close()
     db.close()
-    
-    return render_template('profile.html', 
-                           username=user['username'], 
-                           email=user['email'], 
-                           phone=user['phone_number'], 
-                           profile_pic=user['profile_pic'])
+
+    return render_template('profile.html',
+                           username=user['username'],
+                           email=user['email'],
+                           phone=user['phone_number'],
+                           profile_pic=user['profile_pic'],
+                           bio=(user.get('bio') or ''),
+                           user_id=user['id'],
+                           reel_count=reel_count,
+                           post_count=post_count,
+                           follower_count=follower_count,
+                           following_count=following_count)
 
 ####################################################################
 # FUNCTION: logout
@@ -293,6 +514,145 @@ def profile():
 def logout():
     session.clear()
     return redirect('/login')
+
+####################################################################
+# FUNCTION: user_profile (view-only, for viewing other users)
+####################################################################
+@app.route('/user_profile/<int:user_id>')
+def user_profile(user_id):
+    my_id = session.get('user_id')
+    if not my_id:
+        return redirect('/login')
+
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+
+    cursor.execute("SELECT id, username, profile_pic, bio FROM users WHERE id = %s", (user_id,))
+    target_user = cursor.fetchone()
+    if not target_user:
+        cursor.close()
+        db.close()
+        return redirect('/chat')
+
+    cursor.execute("SELECT COUNT(*) as cnt FROM reels WHERE user_id = %s", (user_id,))
+    reel_count = cursor.fetchone()['cnt']
+
+    cursor.execute("SELECT COUNT(*) as cnt FROM follows WHERE following_id = %s", (user_id,))
+    follower_count = cursor.fetchone()['cnt']
+
+    cursor.execute("SELECT COUNT(*) as cnt FROM follows WHERE follower_id = %s", (user_id,))
+    following_count = cursor.fetchone()['cnt']
+
+    cursor.execute("SELECT id FROM follows WHERE follower_id = %s AND following_id = %s", (my_id, user_id))
+    is_following = cursor.fetchone() is not None
+
+    cursor.execute("SELECT id FROM blocks WHERE blocker_id = %s AND blocked_id = %s", (my_id, user_id))
+    is_blocked = cursor.fetchone() is not None
+
+    cursor.close()
+    db.close()
+
+    return render_template('user_profile.html',
+                           target_user=target_user,
+                           reel_count=reel_count,
+                           follower_count=follower_count,
+                           following_count=following_count,
+                           is_following=is_following,
+                           is_blocked=is_blocked)
+
+####################################################################
+# FUNCTION: follow
+####################################################################
+@app.route('/api/follow', methods=['POST'])
+def api_follow():
+    my_id = session.get('user_id')
+    if not my_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    data = request.get_json()
+    target_id = data.get('user_id')
+    if not target_id or int(target_id) == my_id:
+        return jsonify({'error': 'Invalid'}), 400
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    try:
+        cursor.execute("INSERT INTO follows (follower_id, following_id) VALUES (%s, %s)", (my_id, int(target_id)))
+        db.commit()
+    except Exception:
+        pass
+    cursor.execute("SELECT COUNT(*) as cnt FROM follows WHERE following_id = %s", (int(target_id),))
+    fc = cursor.fetchone()['cnt']
+    cursor.close()
+    db.close()
+    return jsonify({'success': True, 'follower_count': fc})
+
+####################################################################
+# FUNCTION: unfollow
+####################################################################
+@app.route('/api/unfollow', methods=['POST'])
+def api_unfollow():
+    my_id = session.get('user_id')
+    if not my_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    data = request.get_json()
+    target_id = data.get('user_id')
+    if not target_id or int(target_id) == my_id:
+        return jsonify({'error': 'Invalid'}), 400
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("DELETE FROM follows WHERE follower_id = %s AND following_id = %s", (my_id, int(target_id)))
+    db.commit()
+    cursor.execute("SELECT COUNT(*) as cnt FROM follows WHERE following_id = %s", (int(target_id),))
+    fc = cursor.fetchone()['cnt']
+    cursor.close()
+    db.close()
+    return jsonify({'success': True, 'follower_count': fc})
+
+####################################################################
+# FUNCTION: block
+####################################################################
+@app.route('/api/block', methods=['POST'])
+def api_block():
+    my_id = session.get('user_id')
+    if not my_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    data = request.get_json()
+    target_id = data.get('user_id')
+    if not target_id or int(target_id) == my_id:
+        return jsonify({'error': 'Invalid'}), 400
+    db = get_db()
+    cursor = db.cursor()
+    try:
+        cursor.execute("INSERT INTO blocks (blocker_id, blocked_id) VALUES (%s, %s)", (my_id, int(target_id)))
+        db.commit()
+    except Exception:
+        pass
+    # Also remove any follow relationship
+    cursor.execute("DELETE FROM follows WHERE follower_id = %s AND following_id = %s", (my_id, int(target_id)))
+    cursor.execute("DELETE FROM follows WHERE follower_id = %s AND following_id = %s", (int(target_id), my_id))
+    db.commit()
+    cursor.close()
+    db.close()
+    return jsonify({'success': True})
+
+####################################################################
+# FUNCTION: unblock
+####################################################################
+@app.route('/api/unblock', methods=['POST'])
+def api_unblock():
+    my_id = session.get('user_id')
+    if not my_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    data = request.get_json()
+    target_id = data.get('user_id')
+    if not target_id or int(target_id) == my_id:
+        return jsonify({'error': 'Invalid'}), 400
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("DELETE FROM blocks WHERE blocker_id = %s AND blocked_id = %s", (my_id, int(target_id)))
+    db.commit()
+    cursor.close()
+    db.close()
+    return jsonify({'success': True})
 
 ####################################################################
 # FUNCTION: remove_profile_pic
@@ -324,6 +684,540 @@ def remove_profile_pic():
     db.close()
 
     return redirect('/profile')
+
+####################################################################
+# FUNCTION: update_profile_info
+####################################################################
+@app.route('/update_profile_info', methods=['POST'])
+def update_profile_info():
+    if not session.get('user_id'):
+        return jsonify({'error': 'Unauthorized'}), 401
+    data = request.get_json()
+    username = data.get('username', '').strip()
+    bio = data.get('bio', '').strip()
+    if not username or len(username) > 50:
+        return jsonify({'error': 'Invalid username'}), 400
+    if len(bio) > 200:
+        return jsonify({'error': 'Bio too long'}), 400
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("UPDATE users SET username=%s, bio=%s WHERE id=%s",
+                   (username, bio, session['user_id']))
+    db.commit()
+    cursor.close()
+    db.close()
+    return jsonify({'success': True})
+
+####################################################################
+# FUNCTION: call_history
+####################################################################
+@app.route('/api/call_history')
+def call_history():
+    uid = session.get('user_id')
+    if not uid:
+        return jsonify({'error': 'Unauthorized'}), 401
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT m.id, m.sender_id, m.receiver_id, m.message, m.timestamp,
+               u.username, u.profile_pic
+        FROM messages m
+        JOIN users u ON u.id = IF(m.sender_id=%s, m.receiver_id, m.sender_id)
+        WHERE m.type = 'call' AND (m.sender_id=%s OR m.receiver_id=%s)
+        ORDER BY m.timestamp DESC
+        LIMIT 50
+    """, (uid, uid, uid))
+    calls = cursor.fetchall()
+    cursor.close()
+    db.close()
+    return jsonify(calls)
+
+####################################################################
+# FUNCTION: get_notifications
+####################################################################
+@app.route('/api/notifications')
+def get_notifications():
+    uid = session.get('user_id')
+    if not uid:
+        return jsonify({'error': 'Unauthorized'}), 401
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT n.*, u.username, u.profile_pic
+        FROM notifications n
+        LEFT JOIN users u ON u.id = n.from_user_id
+        WHERE n.user_id = %s
+        ORDER BY n.created_at DESC
+        LIMIT 50
+    """, (uid,))
+    notifs = cursor.fetchall()
+    cursor.close()
+    db.close()
+    return jsonify(notifs)
+
+####################################################################
+# FUNCTION: mark_notifications_read
+####################################################################
+@app.route('/api/notifications/read', methods=['POST'])
+def mark_notifications_read():
+    uid = session.get('user_id')
+    if not uid:
+        return jsonify({'error': 'Unauthorized'}), 401
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("UPDATE notifications SET is_read = 1 WHERE user_id = %s", (uid,))
+    db.commit()
+    cursor.close()
+    db.close()
+    return jsonify({'success': True})
+
+####################################################################
+# FUNCTION: unread_notification_count
+####################################################################
+@app.route('/api/notifications/unread_count')
+def unread_notification_count():
+    uid = session.get('user_id')
+    if not uid:
+        return jsonify({'error': 'Unauthorized'}), 401
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT COUNT(*) as count FROM notifications WHERE user_id=%s AND is_read=0", (uid,))
+    result = cursor.fetchone()
+    cursor.close()
+    db.close()
+    return jsonify({'count': result['count']})
+
+####################################################################
+# FUNCTION: get_user_info
+####################################################################
+@app.route('/api/user/<int:user_id>')
+def get_user_info(user_id):
+    uid = session.get('user_id')
+    if not uid:
+        return jsonify({'error': 'Unauthorized'}), 401
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT id, username, profile_pic FROM users WHERE id = %s", (user_id,))
+    user = cursor.fetchone()
+    cursor.close()
+    db.close()
+    if not user:
+        return jsonify({'error': 'Not found'}), 404
+    return jsonify(user)
+
+# ---- STATUS ROUTES ----
+
+@app.route('/upload_status', methods=['POST'])
+def upload_status():
+    uid = session.get('user_id')
+    if not uid:
+        return jsonify({'error': 'Unauthorized'}), 401
+    if 'media' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+    file = request.files['media']
+    if not file.filename:
+        return jsonify({'error': 'No file selected'}), 400
+    caption = request.form.get('caption', '').strip()[:200]
+    if not allowed_file(file.filename, ALLOWED_IMAGE_EXT | ALLOWED_VIDEO_EXT):
+        return jsonify({'error': 'Invalid file type'}), 400
+    ext = file.filename.rsplit('.', 1)[1].lower()
+    media_type = 'image' if ext in ALLOWED_IMAGE_EXT else 'video'
+    filename = f"status_{uid}_{uuid.uuid4().hex}.{ext}"
+    file.save(os.path.join(UPLOAD_FOLDER_STATUS, filename))
+    media_url = f"/static/uploads/statuses/{filename}"
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute(
+        "INSERT INTO statuses (user_id, media_url, media_type, caption, expires_at) "
+        "VALUES (%s, %s, %s, %s, DATE_ADD(NOW(), INTERVAL 24 HOUR))",
+        (uid, media_url, media_type, caption))
+    cursor.close()
+    db.close()
+    return jsonify({'success': True})
+
+@app.route('/api/statuses')
+def get_statuses():
+    uid = session.get('user_id')
+    if not uid:
+        return jsonify({'error': 'Unauthorized'}), 401
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT s.*, u.username, u.profile_pic,
+               (SELECT COUNT(*) FROM status_views sv WHERE sv.status_id = s.id) as view_count,
+               (SELECT COUNT(*) FROM status_views sv WHERE sv.status_id = s.id AND sv.user_id = %s) as viewed_by_me
+        FROM statuses s
+        JOIN users u ON u.id = s.user_id
+        WHERE s.expires_at > NOW()
+        ORDER BY s.user_id, s.created_at ASC
+    """, (uid,))
+    statuses = cursor.fetchall()
+    cursor.close()
+    db.close()
+    grouped = {}
+    for s in statuses:
+        k = s['user_id']
+        if k not in grouped:
+            grouped[k] = {'user_id': k, 'username': s['username'],
+                          'profile_pic': s['profile_pic'], 'statuses': []}
+        grouped[k]['statuses'].append(s)
+    result = list(grouped.values())
+    result.sort(key=lambda x: (0 if x['user_id'] == uid else 1))
+    return jsonify(result)
+
+@app.route('/api/status/<int:status_id>/view', methods=['POST'])
+def view_status(status_id):
+    uid = session.get('user_id')
+    if not uid:
+        return jsonify({'error': 'Unauthorized'}), 401
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("INSERT IGNORE INTO status_views (status_id, user_id) VALUES (%s, %s)",
+                   (status_id, uid))
+    cursor.close()
+    db.close()
+    return jsonify({'success': True})
+
+@app.route('/api/status/<int:status_id>', methods=['DELETE'])
+def delete_status(status_id):
+    uid = session.get('user_id')
+    if not uid:
+        return jsonify({'error': 'Unauthorized'}), 401
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM statuses WHERE id=%s AND user_id=%s", (status_id, uid))
+    status = cursor.fetchone()
+    if not status:
+        cursor.close()
+        db.close()
+        return jsonify({'error': 'Not found'}), 404
+    fpath = os.path.join(app.root_path, status['media_url'].lstrip('/'))
+    if os.path.exists(fpath):
+        try:
+            os.remove(fpath)
+        except Exception:
+            pass
+    cur2 = db.cursor()
+    cur2.execute("DELETE FROM status_views WHERE status_id=%s", (status_id,))
+    cur2.execute("DELETE FROM statuses WHERE id=%s", (status_id,))
+    cur2.close()
+    cursor.close()
+    db.close()
+    return jsonify({'success': True})
+
+# ---- POSTS ROUTES ----
+
+@app.route('/upload_post', methods=['POST'])
+def upload_post():
+    uid = session.get('user_id')
+    if not uid:
+        return jsonify({'error': 'Unauthorized'}), 401
+    if 'media' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+    file = request.files['media']
+    if not file.filename:
+        return jsonify({'error': 'No file selected'}), 400
+    if not allowed_file(file.filename, ALLOWED_IMAGE_EXT | ALLOWED_VIDEO_EXT):
+        return jsonify({'error': 'Invalid file type'}), 400
+    caption = request.form.get('caption', '').strip()[:200]
+    ext = file.filename.rsplit('.', 1)[1].lower()
+    media_type = 'image' if ext in ALLOWED_IMAGE_EXT else 'video'
+    filename = f"post_{uid}_{uuid.uuid4().hex}.{ext}"
+    file.save(os.path.join(UPLOAD_FOLDER_POSTS, filename))
+    media_url = f"/static/uploads/images/{filename}"
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("INSERT INTO posts (user_id, media_url, media_type, caption) VALUES (%s, %s, %s, %s)",
+                   (uid, media_url, media_type, caption))
+    cursor.close()
+    db.close()
+    return jsonify({'success': True})
+
+@app.route('/api/my_posts')
+def get_my_posts():
+    uid = session.get('user_id')
+    if not uid:
+        return jsonify({'error': 'Unauthorized'}), 401
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM posts WHERE user_id = %s ORDER BY created_at DESC", (uid,))
+    posts = cursor.fetchall()
+    cursor.close()
+    db.close()
+    return jsonify(posts)
+
+@app.route('/api/post/<int:post_id>', methods=['DELETE'])
+def delete_post(post_id):
+    uid = session.get('user_id')
+    if not uid:
+        return jsonify({'error': 'Unauthorized'}), 401
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM posts WHERE id=%s AND user_id=%s", (post_id, uid))
+    post = cursor.fetchone()
+    if not post:
+        cursor.close()
+        db.close()
+        return jsonify({'error': 'Not found'}), 404
+    fpath = os.path.join(app.root_path, post['media_url'].lstrip('/'))
+    if os.path.exists(fpath):
+        try:
+            os.remove(fpath)
+        except Exception:
+            pass
+    cur2 = db.cursor()
+    cur2.execute("DELETE FROM posts WHERE id=%s", (post_id,))
+    cur2.close()
+    cursor.close()
+    db.close()
+    return jsonify({'success': True})
+
+# ---- REELS ROUTES ----
+
+@app.route('/upload_reel', methods=['POST'])
+def upload_reel():
+    uid = session.get('user_id')
+    if not uid:
+        return jsonify({'error': 'Unauthorized'}), 401
+    if 'video' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+    file = request.files['video']
+    if not file.filename:
+        return jsonify({'error': 'No file selected'}), 400
+    if not allowed_file(file.filename, ALLOWED_VIDEO_EXT):
+        return jsonify({'error': 'Use MP4, WebM, or MOV'}), 400
+    caption = request.form.get('caption', '').strip()[:200]
+    ext = file.filename.rsplit('.', 1)[1].lower()
+    filename = f"reel_{uid}_{uuid.uuid4().hex}.{ext}"
+    file.save(os.path.join(UPLOAD_FOLDER_REELS, filename))
+    video_url = f"/static/uploads/reels/{filename}"
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("INSERT INTO reels (user_id, video_url, caption) VALUES (%s, %s, %s)",
+                   (uid, video_url, caption))
+    cursor.close()
+    db.close()
+    return jsonify({'success': True})
+
+@app.route('/api/reels')
+def get_reels():
+    uid = session.get('user_id')
+    if not uid:
+        return jsonify({'error': 'Unauthorized'}), 401
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT r.*, u.username, u.profile_pic,
+               (SELECT COUNT(*) FROM reel_likes rl WHERE rl.reel_id = r.id) as like_count,
+               (SELECT COUNT(*) FROM reel_likes rl WHERE rl.reel_id = r.id AND rl.user_id = %s) as liked_by_me
+        FROM reels r JOIN users u ON u.id = r.user_id
+        ORDER BY r.created_at DESC LIMIT 50
+    """, (uid,))
+    reels = cursor.fetchall()
+    cursor.close()
+    db.close()
+    return jsonify(reels)
+
+@app.route('/api/reel/<int:reel_id>/like', methods=['POST'])
+def like_reel(reel_id):
+    uid = session.get('user_id')
+    if not uid:
+        return jsonify({'error': 'Unauthorized'}), 401
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT id FROM reel_likes WHERE reel_id=%s AND user_id=%s", (reel_id, uid))
+    existed = cursor.fetchone()
+    cur2 = db.cursor()
+    if existed:
+        cur2.execute("DELETE FROM reel_likes WHERE reel_id=%s AND user_id=%s", (reel_id, uid))
+    else:
+        cur2.execute("INSERT INTO reel_likes (reel_id, user_id) VALUES (%s, %s)", (reel_id, uid))
+    cursor.execute("SELECT COUNT(*) as cnt FROM reel_likes WHERE reel_id=%s", (reel_id,))
+    count = cursor.fetchone()['cnt']
+    cur2.close()
+    cursor.close()
+    db.close()
+    return jsonify({'liked': not bool(existed), 'count': count})
+
+@app.route('/api/reel/<int:reel_id>', methods=['DELETE'])
+def delete_reel(reel_id):
+    uid = session.get('user_id')
+    if not uid:
+        return jsonify({'error': 'Unauthorized'}), 401
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM reels WHERE id=%s AND user_id=%s", (reel_id, uid))
+    reel = cursor.fetchone()
+    if not reel:
+        cursor.close()
+        db.close()
+        return jsonify({'error': 'Not found'}), 404
+    fpath = os.path.join(app.root_path, reel['video_url'].lstrip('/'))
+    if os.path.exists(fpath):
+        try:
+            os.remove(fpath)
+        except Exception:
+            pass
+    cur2 = db.cursor()
+    cur2.execute("DELETE FROM reel_likes WHERE reel_id=%s", (reel_id,))
+    cur2.execute("DELETE FROM reel_comments WHERE reel_id=%s", (reel_id,))
+    cur2.execute("DELETE FROM reels WHERE id=%s", (reel_id,))
+    cur2.close()
+    cursor.close()
+    db.close()
+    return jsonify({'success': True})
+
+@app.route('/api/reel/<int:reel_id>/comments', methods=['GET'])
+def get_reel_comments(reel_id):
+    uid = session.get('user_id')
+    if not uid:
+        return jsonify({'error': 'Unauthorized'}), 401
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT rc.id, rc.comment, rc.created_at, u.username, u.profile_pic
+        FROM reel_comments rc
+        JOIN users u ON rc.user_id = u.id
+        WHERE rc.reel_id = %s
+        ORDER BY rc.created_at ASC LIMIT 200
+    """, (reel_id,))
+    comments = cursor.fetchall()
+    for c in comments:
+        c['created_at'] = str(c['created_at'])
+    cursor.close()
+    db.close()
+    return jsonify(comments)
+
+@app.route('/api/reel/<int:reel_id>/comments', methods=['POST'])
+def post_reel_comment(reel_id):
+    uid = session.get('user_id')
+    if not uid:
+        return jsonify({'error': 'Unauthorized'}), 401
+    data = request.get_json(force=True)
+    comment = (data.get('comment') or '').strip()[:500]
+    if not comment:
+        return jsonify({'error': 'Empty comment'}), 400
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT id FROM reels WHERE id=%s", (reel_id,))
+    if not cursor.fetchone():
+        cursor.close()
+        db.close()
+        return jsonify({'error': 'Reel not found'}), 404
+    cur2 = db.cursor()
+    cur2.execute("INSERT INTO reel_comments (reel_id, user_id, comment) VALUES (%s,%s,%s)",
+                 (reel_id, uid, comment))
+    cur2.close()
+    cursor.execute("SELECT username, profile_pic FROM users WHERE id=%s", (uid,))
+    me = cursor.fetchone()
+    cursor.close()
+    db.close()
+    return jsonify({'success': True, 'username': me['username'], 'profile_pic': me.get('profile_pic','')})
+
+# ---- SONGS ROUTES ----
+
+@app.route('/upload_song', methods=['POST'])
+def upload_song():
+    uid = session.get('user_id')
+    if not uid:
+        return jsonify({'error': 'Unauthorized'}), 401
+    if 'audio' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+    file = request.files['audio']
+    if not file.filename:
+        return jsonify({'error': 'No file selected'}), 400
+    if not allowed_file(file.filename, ALLOWED_AUDIO_EXT):
+        return jsonify({'error': 'Invalid audio file type'}), 400
+    title = request.form.get('title', '').strip()[:200] or file.filename.rsplit('.', 1)[0][:200]
+    artist = request.form.get('artist', '').strip()[:200]
+    ext = file.filename.rsplit('.', 1)[1].lower()
+    filename = f"song_{uid}_{uuid.uuid4().hex}.{ext}"
+    file.save(os.path.join(UPLOAD_FOLDER_SONGS, filename))
+    audio_url = f"/static/uploads/songs/{filename}"
+    cover_url = None
+    if 'cover' in request.files and request.files['cover'].filename:
+        cover = request.files['cover']
+        if allowed_file(cover.filename, ALLOWED_IMAGE_EXT):
+            cext = cover.filename.rsplit('.', 1)[1].lower()
+            cname = f"cover_{uid}_{uuid.uuid4().hex}.{cext}"
+            cover.save(os.path.join(UPLOAD_FOLDER_COVERS, cname))
+            cover_url = f"/static/uploads/song_covers/{cname}"
+    db = get_db()
+    cursor = db.cursor()
+    cursor.execute("INSERT INTO songs (user_id, audio_url, title, artist, cover_url) VALUES (%s,%s,%s,%s,%s)",
+                   (uid, audio_url, title, artist, cover_url))
+    cursor.close()
+    db.close()
+    return jsonify({'success': True})
+
+@app.route('/api/songs')
+def get_songs():
+    uid = session.get('user_id')
+    if not uid:
+        return jsonify({'error': 'Unauthorized'}), 401
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT s.*, u.username, u.profile_pic,
+               (SELECT COUNT(*) FROM song_likes sl WHERE sl.song_id = s.id) as like_count,
+               (SELECT COUNT(*) FROM song_likes sl WHERE sl.song_id = s.id AND sl.user_id = %s) as liked_by_me
+        FROM songs s JOIN users u ON u.id = s.user_id
+        ORDER BY s.created_at DESC LIMIT 100
+    """, (uid,))
+    songs = cursor.fetchall()
+    cursor.close()
+    db.close()
+    return jsonify(songs)
+
+@app.route('/api/song/<int:song_id>/like', methods=['POST'])
+def like_song(song_id):
+    uid = session.get('user_id')
+    if not uid:
+        return jsonify({'error': 'Unauthorized'}), 401
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT id FROM song_likes WHERE song_id=%s AND user_id=%s", (song_id, uid))
+    existed = cursor.fetchone()
+    cur2 = db.cursor()
+    if existed:
+        cur2.execute("DELETE FROM song_likes WHERE song_id=%s AND user_id=%s", (song_id, uid))
+    else:
+        cur2.execute("INSERT INTO song_likes (song_id, user_id) VALUES (%s, %s)", (song_id, uid))
+    cursor.execute("SELECT COUNT(*) as cnt FROM song_likes WHERE song_id=%s", (song_id,))
+    count = cursor.fetchone()['cnt']
+    cur2.close()
+    cursor.close()
+    db.close()
+    return jsonify({'liked': not bool(existed), 'count': count})
+
+@app.route('/api/song/<int:song_id>', methods=['DELETE'])
+def delete_song(song_id):
+    uid = session.get('user_id')
+    if not uid:
+        return jsonify({'error': 'Unauthorized'}), 401
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM songs WHERE id=%s AND user_id=%s", (song_id, uid))
+    song = cursor.fetchone()
+    if not song:
+        cursor.close()
+        db.close()
+        return jsonify({'error': 'Not found'}), 404
+    for url_field in ['audio_url', 'cover_url']:
+        if song.get(url_field):
+            fpath = os.path.join(app.root_path, song[url_field].lstrip('/'))
+            if os.path.exists(fpath):
+                try:
+                    os.remove(fpath)
+                except Exception:
+                    pass
+    cur2 = db.cursor()
+    cur2.execute("DELETE FROM song_likes WHERE song_id=%s", (song_id,))
+    cur2.execute("DELETE FROM songs WHERE id=%s", (song_id,))
+    cur2.close()
+    cursor.close()
+    db.close()
+    return jsonify({'success': True})
 
 ####################################################################
 # FUNCTION: verify
@@ -366,7 +1260,19 @@ def verify():
 def chat():
     if not session.get('user_id'):
         return redirect('/login')
-    return render_template('chat.html', my_id=session.get('user_id'))
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT id, username, profile_pic FROM users WHERE id = %s", (session['user_id'],))
+    user = cursor.fetchone()
+    cursor.close()
+    db.close()
+    if not user:
+        session.clear()
+        return redirect('/login')
+    return render_template('chat.html',
+                           my_id=user['id'],
+                           my_username=user['username'],
+                           my_profile_pic=user.get('profile_pic', ''))
 
 ####################################################################
 # FUNCTION: search_users
@@ -381,13 +1287,16 @@ def search_users():
     db = get_db()
     cursor = db.cursor(dictionary=True)
 
+    # Exclude users who have blocked me or whom I have blocked
     cursor.execute("""
         SELECT id, username, profile_pic
         FROM users
         WHERE username LIKE %s
         AND id != %s
+        AND id NOT IN (SELECT blocked_id FROM blocks WHERE blocker_id = %s)
+        AND id NOT IN (SELECT blocker_id FROM blocks WHERE blocked_id = %s)
         LIMIT 20
-    """, (query + "%", my_id))
+    """, (query + "%", my_id, my_id, my_id))
 
     users = cursor.fetchall()
     cursor.close()
@@ -410,11 +1319,12 @@ def recent_chats():
     cursor.execute("""
         SELECT u.id, u.username, u.profile_pic, m.message, m.timestamp
         FROM messages m
-        JOIN users u 
+        JOIN users u
           ON u.id = IF(m.sender_id=%s, m.receiver_id, m.sender_id)
-        WHERE m.sender_id=%s OR m.receiver_id=%s
+        LEFT JOIN message_deletions md ON md.message_id = m.id AND md.user_id = %s
+        WHERE (m.sender_id=%s OR m.receiver_id=%s) AND md.id IS NULL
         ORDER BY m.timestamp DESC
-    """, (my_id, my_id, my_id))
+    """, (my_id, my_id, my_id, my_id))
 
     rows = cursor.fetchall()
     seen = set()
@@ -441,13 +1351,43 @@ def get_messages(other_id):
     cursor = db.cursor(dictionary=True)
 
     cursor.execute("""
-        SELECT * FROM messages 
-        WHERE (sender_id=%s AND receiver_id=%s)
-        OR (sender_id=%s AND receiver_id=%s)
-        ORDER BY timestamp
-    """, (my_id, other_id, other_id, my_id))
+        SELECT m.* FROM messages m
+        LEFT JOIN message_deletions md ON md.message_id = m.id AND md.user_id = %s
+        WHERE ((m.sender_id=%s AND m.receiver_id=%s)
+            OR (m.sender_id=%s AND m.receiver_id=%s))
+            AND md.id IS NULL
+        ORDER BY m.timestamp
+    """, (my_id, my_id, other_id, other_id, my_id))
 
     messages = cursor.fetchall()
+    msg_ids = [m['id'] for m in messages]
+
+    reactions_map = {}
+    if msg_ids:
+        ph = ','.join(['%s'] * len(msg_ids))
+        cursor.execute(f"""
+            SELECT message_id, emoji, GROUP_CONCAT(user_id) as user_ids, COUNT(*) as cnt
+            FROM message_reactions
+            WHERE message_id IN ({ph})
+            GROUP BY message_id, emoji
+        """, tuple(msg_ids))
+        for r in cursor.fetchall():
+            mid = r['message_id']
+            if mid not in reactions_map:
+                reactions_map[mid] = []
+            reactions_map[mid].append({
+                'emoji': r['emoji'],
+                'count': r['cnt'],
+                'user_ids': [int(x) for x in str(r['user_ids']).split(',')]
+            })
+
+    for msg in messages:
+        msg['reactions'] = reactions_map.get(msg['id'], [])
+        if msg.get('deleted_for_everyone'):
+            msg['message'] = 'This message was deleted'
+            msg['original_type'] = msg.get('type')
+            msg['type'] = 'deleted'
+
     cursor.close()
     db.close()
     return jsonify(messages)
@@ -649,6 +1589,108 @@ def handle_mark_as_read(data):
     emit('messages_read', {'reader_id': receiver_id}, room=str(sender_id))
 
 ####################################################################
+# FUNCTION: handle_delete_message
+####################################################################
+@socketio.on('delete_message')
+def handle_delete_message(data):
+    uid = session.get('user_id')
+    if not uid:
+        return
+    msg_id = data.get('message_id')
+    delete_for = data.get('delete_for', 'me')
+    room = data.get('room')
+    if not msg_id:
+        return
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM messages WHERE id=%s", (msg_id,))
+    msg = cursor.fetchone()
+    if not msg or (msg['sender_id'] != uid and msg['receiver_id'] != uid):
+        cursor.close()
+        db.close()
+        return
+    if delete_for == 'everyone' and msg['sender_id'] == uid:
+        cur2 = db.cursor()
+        cur2.execute("UPDATE messages SET deleted_for_everyone = 1 WHERE id = %s", (msg_id,))
+        db.commit()
+        cur2.close()
+        if room:
+            emit('message_deleted', {'message_id': msg_id, 'delete_for': 'everyone'}, room=room)
+    else:
+        cur2 = db.cursor()
+        cur2.execute(
+            "INSERT IGNORE INTO message_deletions (message_id, user_id) VALUES (%s, %s)",
+            (msg_id, uid)
+        )
+        db.commit()
+        cur2.close()
+        emit('message_deleted', {'message_id': msg_id, 'delete_for': 'me'}, room=str(uid))
+    cursor.close()
+    db.close()
+
+####################################################################
+# FUNCTION: handle_react_message
+####################################################################
+@socketio.on('react_message')
+def handle_react_message(data):
+    uid = session.get('user_id')
+    if not uid:
+        return
+    msg_id = data.get('message_id')
+    emoji = data.get('emoji', '')
+    room = data.get('room')
+    if not msg_id or not emoji or len(emoji) > 10:
+        return
+    db = get_db()
+    cursor = db.cursor(dictionary=True)
+    cursor.execute(
+        "SELECT id FROM message_reactions WHERE message_id=%s AND user_id=%s AND emoji=%s",
+        (msg_id, uid, emoji)
+    )
+    existed = cursor.fetchone()
+    cur2 = db.cursor()
+    if existed:
+        cur2.execute(
+            "DELETE FROM message_reactions WHERE message_id=%s AND user_id=%s AND emoji=%s",
+            (msg_id, uid, emoji)
+        )
+    else:
+        cur2.execute(
+            "INSERT INTO message_reactions (message_id, user_id, emoji) VALUES (%s, %s, %s)",
+            (msg_id, uid, emoji)
+        )
+        cursor.execute("SELECT sender_id FROM messages WHERE id=%s", (msg_id,))
+        msg_row = cursor.fetchone()
+        if msg_row and msg_row['sender_id'] != uid:
+            cur2.execute(
+                "INSERT INTO notifications (user_id, type, from_user_id, reference_id, content) VALUES (%s, 'reaction', %s, %s, %s)",
+                (msg_row['sender_id'], uid, msg_id, emoji)
+            )
+    db.commit()
+    cursor.execute("""
+        SELECT emoji, GROUP_CONCAT(user_id) as user_ids, COUNT(*) as cnt
+        FROM message_reactions WHERE message_id=%s GROUP BY emoji
+    """, (msg_id,))
+    reactions = []
+    for r in cursor.fetchall():
+        reactions.append({
+            'emoji': r['emoji'],
+            'count': r['cnt'],
+            'user_ids': [int(x) for x in str(r['user_ids']).split(',')]
+        })
+    cursor.close()
+    cur2.close()
+    db.close()
+    if room:
+        emit('message_reacted', {
+            'message_id': msg_id,
+            'reactions': reactions,
+            'user_id': uid,
+            'emoji': emoji,
+            'action': 'removed' if existed else 'added'
+        }, room=room)
+
+####################################################################
 # FUNCTION: handle_message
 ####################################################################
 @socketio.on('send_message')
@@ -698,10 +1740,12 @@ def handle_message(data):
         INSERT INTO messages (sender_id, receiver_id, message, type)
         VALUES (%s, %s, %s, %s)
     """, (sender, receiver, content, msg_type))
+    msg_id = cursor.lastrowid
     db.commit()
     cursor.close()
     db.close()
 
+    data['id'] = msg_id
     room = get_room_name(sender, receiver)
     emit('receive_message', data, room=room)
     emit('update_recents', room=str(sender))
