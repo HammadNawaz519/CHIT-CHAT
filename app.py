@@ -1601,7 +1601,7 @@ def recent_chats():
         if row['id'] not in seen:
             seen.add(row['id'])
             if row.get('msg_type') == 'ai':
-                row['message'] = '🤖 Message by AI'
+                row['message'] = 'Message by AI'
             recent.append(row)
 
     cursor.close()
