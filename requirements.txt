@@ -6,3 +6,4 @@ python-dotenv
 gevent
 gevent-websocket
 gunicorn
+requests

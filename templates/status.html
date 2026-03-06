@@ -4,8 +4,10 @@
 .status-rings::-webkit-scrollbar{display:none}
 .status-ring{display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;flex-shrink:0}
 .status-ring-avatar{width:68px;height:68px;border-radius:50%;overflow:hidden;border:3px solid var(--sand);padding:3px;background:var(--white);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1.2rem;color:var(--charcoal);transition:all .3s}
-.status-ring.has-unseen .status-ring-avatar{border-color:var(--charcoal)}
 .status-ring.is-mine .status-ring-avatar{border-color:#4ADE80}
+.status-ring.is-mine-seen .status-ring-avatar{border-color:#D1D5DB}
+.status-ring.has-unseen .status-ring-avatar{border-color:transparent;background:linear-gradient(var(--white),var(--white)) padding-box,linear-gradient(135deg,#f09433 0%,#e6683c 25%,#dc2743 50%,#cc2366 75%,#bc1888 100%) border-box}
+.status-ring.all-seen .status-ring-avatar{border-color:#D1D5DB}
 .status-ring-avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}
 .status-ring-name{font-size:.7rem;font-weight:600;color:var(--muted);max-width:68px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 /* STATUS VIEWER */
@@ -74,9 +76,14 @@ async function loadStatuses() {
     rings.innerHTML = '';
     allStatusData.forEach((group, idx) => {
       const isMine = group.user_id === myId;
-      const hasUnseen = group.statuses.some(s => !s.viewed_by_me && !isMine);
+      let ringClass = 'status-ring';
+      if (isMine) {
+        ringClass += group.statuses.every(s => s.viewed_by_me) ? ' is-mine-seen' : ' is-mine';
+      } else {
+        ringClass += group.statuses.some(s => !s.viewed_by_me) ? ' has-unseen' : ' all-seen';
+      }
       const ring = document.createElement('div');
-      ring.className = 'status-ring' + (hasUnseen ? ' has-unseen' : '') + (isMine ? ' is-mine' : '');
+      ring.className = ringClass;
       const pfp = (group.profile_pic && group.profile_pic !== 'default_profile.png')
         ? '<img src="/static/uploads/' + group.profile_pic + '">'
         : '<img src="/static/Images/profile.png">';
@@ -150,7 +157,7 @@ function showCurrentStatus() {
   document.getElementById('svCaption').textContent = s.caption || '';
   document.getElementById('svViews').innerHTML = isMine ? '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14" style="vertical-align:middle;margin-right:3px"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg> ' + s.view_count + ' views' : '';
   document.getElementById('svDeleteBtn').style.display = isMine ? 'block' : 'none';
-  if (!isMine && !s.viewed_by_me) {
+  if (!s.viewed_by_me) {
     fetch('/api/status/' + s.id + '/view', { method: 'POST' });
     s.viewed_by_me = 1;
   }

@@ -757,6 +757,44 @@ def api_block():
     return jsonify({'success': True})
 
 ####################################################################
+# FUNCTION: AI chat (OpenRouter)
+####################################################################
+@app.route('/api/ai', methods=['POST'])
+def api_ai():
+    my_id = session.get('user_id')
+    if not my_id:
+        return jsonify({'error': 'Unauthorized'}), 401
+    data = request.get_json()
+    message = (data.get('message') or '').strip()
+    if not message:
+        return jsonify({'error': 'Empty message'}), 400
+    api_key = os.getenv('OPENROUTER_API_KEY')
+    if not api_key:
+        return jsonify({'error': 'AI not configured'}), 503
+    import requests as _req
+    try:
+        resp = _req.post(
+            'https://openrouter.ai/api/v1/chat/completions',
+            headers={
+                'Authorization': f'Bearer {api_key}',
+                'Content-Type': 'application/json',
+            },
+            json={
+                'model': 'perplexity/sonar',
+                'messages': [{'role': 'user', 'content': message}],
+                'max_tokens': 600,
+            },
+            timeout=30
+        )
+        resp.raise_for_status()
+        result = resp.json()
+        choice = result['choices'][0]['message']
+        reply = choice.get('content') or choice.get('reasoning') or 'No response.'
+        return jsonify({'reply': reply})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+####################################################################
 # FUNCTION: unblock
 ####################################################################
 @app.route('/api/unblock', methods=['POST'])
