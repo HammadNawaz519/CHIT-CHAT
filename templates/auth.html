@@ -27,6 +27,7 @@
 
 html,body{
   height:100%;
+  overflow:hidden;
 }
 
 .fullscreen-wrapper{
@@ -38,6 +39,7 @@ html,body{
   background:linear-gradient(135deg, var(--ivory) 0%, #FFFFFF 50%, var(--sand) 100%);
   position:relative;
   color:var(--charcoal);
+  overflow:hidden;
 }
 
 /* BACKGROUND GLOW */
@@ -308,7 +310,6 @@ html,body{
     width: 85%;
     border-radius:32px;
     margin: 0;
-    transform: translateY(-30px);
   }
 
   .right{
@@ -358,7 +359,7 @@ html,body{
 }
 
 @media (max-height: 620px) and (max-width: 850px) {
-  .container { transform: translateY(-20px) scale(0.95); }
+  .container { max-height: 98vh; }
 }
 </style>
 </head>

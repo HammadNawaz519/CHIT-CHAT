@@ -1,4 +1,4 @@
-import os
+﻿import os
 import random
 import string
 import base64
@@ -15,14 +15,6 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Detect if we're running on Render (or any cloud) vs local
-_DATABASE_URL = os.getenv("DATABASE_URL")
-_USE_POSTGRES = bool(_DATABASE_URL)
-
-if _USE_POSTGRES:
-    import psycopg2
-    import psycopg2.extras
-
 app = Flask(__name__)
 app.secret_key = os.getenv("SECRET_KEY")
 
@@ -32,7 +24,7 @@ app.secret_key = os.getenv("SECRET_KEY")
 # do *not* mark the session as permanent, which means the cookie is
 # discarded when the browser closes.  This prevents the situation
 # where somebody opens the app, logs in, copies a URL and sends it to
-# a friend who then magically has a valid login – the friend has no
+# a friend who then magically has a valid login â€“ the friend has no
 # session cookie, so our @login_required guards will redirect them to
 # /login.
 
@@ -72,10 +64,6 @@ ongoing_calls = {}
 # FUNCTION: get_db  +  compatibility layer for MySQL / PostgreSQL
 ####################################################################
 def get_db():
-    if _USE_POSTGRES:
-        conn = psycopg2.connect(_DATABASE_URL)
-        conn.autocommit = True
-        return conn
     return mysql.connector.connect(
         host=os.getenv("DB_HOST"),
         user=os.getenv("DB_USER"),
@@ -83,44 +71,6 @@ def get_db():
         database=os.getenv("DB_NAME"),
         autocommit=True
     )
-
-
-def get_cursor(db, dictionary=False):
-    """Return a cursor. For PostgreSQL use RealDictCursor when dict mode requested."""
-    if _USE_POSTGRES:
-        if dictionary:
-            return db.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        return db.cursor()
-    if dictionary:
-        return get_cursor(db, dictionary=True)
-    return db.cursor()
-
-
-def insert_returning_id(cursor, sql, params):
-    """Execute an INSERT and return the new row id, works for both MySQL and PG."""
-    if _USE_POSTGRES:
-        cursor.execute(sql.rstrip().rstrip(';') + " RETURNING id", params)
-        return cursor.fetchone()[0]
-    cursor.execute(sql, params)
-    return cursor.lastrowid
-
-
-def sql_compat(query):
-    """Translate MySQL-specific SQL to PostgreSQL when needed."""
-    if not _USE_POSTGRES:
-        return query
-    import re
-    # INSERT IGNORE → INSERT ... ON CONFLICT DO NOTHING
-    q = re.sub(r'INSERT\s+IGNORE\s+INTO', 'INSERT INTO', query, flags=re.IGNORECASE)
-    if 'INSERT IGNORE' in query.upper():
-        # Add ON CONFLICT DO NOTHING before any trailing clause
-        q = q.rstrip().rstrip(';')
-        q += ' ON CONFLICT DO NOTHING'
-    # GROUP_CONCAT(col) → STRING_AGG(col::TEXT, ',')
-    q = re.sub(r'GROUP_CONCAT\((\w+)\)', r"STRING_AGG(\1::TEXT, ',')", q, flags=re.IGNORECASE)
-    # DATE_ADD(NOW(), INTERVAL 24 HOUR) → NOW() + INTERVAL '24 hours'
-    q = re.sub(r"DATE_ADD\(NOW\(\),\s*INTERVAL\s+(\d+)\s+HOUR\)", r"NOW() + INTERVAL '\1 hours'", q, flags=re.IGNORECASE)
-    return q
 
 # ---------------- MAIL ----------------
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
@@ -158,28 +108,6 @@ def get_room_name(user1, user2):
 # ---------------- DATABASE INIT ----------------
 def init_db():
     """Create missing tables and columns on startup."""
-    if _USE_POSTGRES:
-        # On Render/PostgreSQL the tables are pre-created via database.postgres.sql.
-        # Just ensure optional columns exist.
-        try:
-            db = get_db()
-            cursor = db.cursor()
-            for tbl, col, defn in [
-                ('messages', 'deleted_for_everyone', 'SMALLINT DEFAULT 0'),
-                ('users', 'bio', 'TEXT'),
-                ('messages', 'reply_to_id', 'INT DEFAULT NULL'),
-                ('messages', 'reply_preview', 'TEXT DEFAULT NULL'),
-            ]:
-                try:
-                    cursor.execute(f"ALTER TABLE {tbl} ADD COLUMN {col} {defn}")
-                except Exception:
-                    pass
-            cursor.close()
-            db.close()
-            app.logger.info('init_db (postgres) completed')
-        except Exception as e:
-            app.logger.warning(f'init_db error: {e}')
-        return
     try:
         db = get_db()
         cursor = db.cursor()
@@ -443,7 +371,7 @@ def login():
 
     if request.method == 'POST' and 'phone' in request.form:
         db = get_db()
-        cursor = get_cursor(db, dictionary=True)
+        cursor = db.cursor(dictionary=True)
 
         phone = request.form.get('phone')
         raw_password = request.form.get('password', '')
@@ -487,7 +415,7 @@ def login():
 @app.route('/register', methods=['POST'])
 def register():
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
 
     username = request.form.get('username')
     phone = request.form.get('phone')
@@ -580,7 +508,7 @@ def profile():
         return redirect('/login')
 
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute("SELECT * FROM users WHERE id = %s", (session['user_id'],))
     user = cursor.fetchone()
     cursor.execute("SELECT COUNT(*) as cnt FROM reels WHERE user_id = %s", (session['user_id'],))
@@ -624,7 +552,7 @@ def user_profile(user_id):
         return redirect('/login')
 
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
 
     cursor.execute("SELECT id, username, profile_pic, bio FROM users WHERE id = %s", (user_id,))
     target_user = cursor.fetchone()
@@ -672,7 +600,7 @@ def api_follow():
     if not target_id or int(target_id) == my_id:
         return jsonify({'error': 'Invalid'}), 400
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     try:
         cursor.execute("INSERT INTO follows (follower_id, following_id) VALUES (%s, %s)", (my_id, int(target_id)))
         db.commit()
@@ -697,7 +625,7 @@ def api_unfollow():
     if not target_id or int(target_id) == my_id:
         return jsonify({'error': 'Invalid'}), 400
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute("DELETE FROM follows WHERE follower_id = %s AND following_id = %s", (my_id, int(target_id)))
     db.commit()
     cursor.execute("SELECT COUNT(*) as cnt FROM follows WHERE following_id = %s", (int(target_id),))
@@ -715,7 +643,7 @@ def api_my_followers():
     if not my_id:
         return jsonify({'error': 'Unauthorized'}), 401
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute("""
         SELECT u.id, u.username, u.profile_pic,
                (SELECT COUNT(*) FROM follows WHERE follower_id = %s AND following_id = u.id) as i_follow_them
@@ -734,7 +662,7 @@ def api_my_following():
     if not my_id:
         return jsonify({'error': 'Unauthorized'}), 401
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute("""
         SELECT u.id, u.username, u.profile_pic
         FROM follows f
@@ -756,7 +684,7 @@ def api_remove_follower():
     if not target_id or int(target_id) == my_id:
         return jsonify({'error': 'Invalid'}), 400
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute("DELETE FROM follows WHERE follower_id = %s AND following_id = %s", (int(target_id), my_id))
     db.commit()
     cursor.execute("SELECT COUNT(*) as cnt FROM follows WHERE following_id = %s", (my_id,))
@@ -771,7 +699,7 @@ def api_user_followers(uid):
     if not my_id:
         return jsonify({'error': 'Unauthorized'}), 401
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute("""
         SELECT u.id, u.username, u.profile_pic
         FROM follows f
@@ -789,7 +717,7 @@ def api_user_following(uid):
     if not my_id:
         return jsonify({'error': 'Unauthorized'}), 401
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute("""
         SELECT u.id, u.username, u.profile_pic
         FROM follows f
@@ -898,7 +826,7 @@ def remove_profile_pic():
 
     uid = session['user_id']
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
 
     cursor.execute("SELECT profile_pic FROM users WHERE id = %s", (uid,))
     user = cursor.fetchone()
@@ -951,7 +879,7 @@ def call_history():
     if not uid:
         return jsonify({'error': 'Unauthorized'}), 401
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute("""
         SELECT m.id, m.sender_id, m.receiver_id, m.message, m.timestamp,
                u.username, u.profile_pic
@@ -975,7 +903,7 @@ def get_notifications():
     if not uid:
         return jsonify({'error': 'Unauthorized'}), 401
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute("""
         SELECT n.*, u.username, u.profile_pic
         FROM notifications n
@@ -1014,7 +942,7 @@ def unread_notification_count():
     if not uid:
         return jsonify({'error': 'Unauthorized'}), 401
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute("SELECT COUNT(*) as count FROM notifications WHERE user_id=%s AND is_read=0", (uid,))
     result = cursor.fetchone()
     cursor.close()
@@ -1030,7 +958,7 @@ def get_user_info(user_id):
     if not uid:
         return jsonify({'error': 'Unauthorized'}), 401
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute("SELECT id, username, profile_pic FROM users WHERE id = %s", (user_id,))
     user = cursor.fetchone()
     cursor.close()
@@ -1061,10 +989,9 @@ def upload_status():
     media_url = f"/static/uploads/statuses/{filename}"
     db = get_db()
     cursor = db.cursor()
-    _expires_sql = "DATE_ADD(NOW(), INTERVAL 24 HOUR)" if not _USE_POSTGRES else "NOW() + INTERVAL '24 hours'"
     cursor.execute(
         "INSERT INTO statuses (user_id, media_url, media_type, caption, expires_at) "
-        f"VALUES (%s, %s, %s, %s, {_expires_sql})",
+        "VALUES (%s, %s, %s, %s, DATE_ADD(NOW(), INTERVAL 24 HOUR))",
         (uid, media_url, media_type, caption))
     cursor.close()
     db.close()
@@ -1076,7 +1003,7 @@ def get_statuses():
     if not uid:
         return jsonify({'error': 'Unauthorized'}), 401
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute("""
         SELECT s.*, u.username, u.profile_pic,
                (SELECT COUNT(*) FROM status_views sv WHERE sv.status_id = s.id) as view_count,
@@ -1114,10 +1041,7 @@ def view_status(status_id):
         return jsonify({'error': 'Unauthorized'}), 401
     db = get_db()
     cursor = db.cursor()
-    _ins_status_view = "INSERT INTO status_views (status_id, user_id) VALUES (%s, %s)"
-    if _USE_POSTGRES:
-        _ins_status_view += " ON CONFLICT DO NOTHING"
-    cursor.execute(_ins_status_view, (status_id, uid))
+    cursor.execute("INSERT IGNORE INTO status_views (status_id, user_id) VALUES (%s, %s)", (status_id, uid))
     cursor.close()
     db.close()
     return jsonify({'success': True})
@@ -1128,7 +1052,7 @@ def delete_status(status_id):
     if not uid:
         return jsonify({'error': 'Unauthorized'}), 401
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute("SELECT * FROM statuses WHERE id=%s AND user_id=%s", (status_id, uid))
     status = cursor.fetchone()
     if not status:
@@ -1183,7 +1107,7 @@ def get_my_posts():
     if not uid:
         return jsonify({'error': 'Unauthorized'}), 401
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute("SELECT * FROM posts WHERE user_id = %s ORDER BY created_at DESC", (uid,))
     posts = cursor.fetchall()
     for p in posts:
@@ -1199,7 +1123,7 @@ def get_all_posts():
     if not uid:
         return jsonify({'error': 'Unauthorized'}), 401
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute("""
         SELECT p.*, u.username, u.profile_pic
         FROM posts p JOIN users u ON u.id = p.user_id
@@ -1219,7 +1143,7 @@ def delete_post(post_id):
     if not uid:
         return jsonify({'error': 'Unauthorized'}), 401
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute("SELECT * FROM posts WHERE id=%s AND user_id=%s", (post_id, uid))
     post = cursor.fetchone()
     if not post:
@@ -1247,7 +1171,7 @@ def like_post(post_id):
     if not uid:
         return jsonify({'error': 'Unauthorized'}), 401
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute("SELECT id FROM post_likes WHERE post_id=%s AND user_id=%s", (post_id, uid))
     existing = cursor.fetchone()
     cur2 = db.cursor()
@@ -1270,7 +1194,7 @@ def get_post_comments(post_id):
     if not uid:
         return jsonify({'error': 'Unauthorized'}), 401
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute("""
         SELECT pc.*, u.username, u.profile_pic
         FROM post_comments pc
@@ -1300,7 +1224,7 @@ def add_post_comment(post_id):
     cur2.execute("INSERT INTO post_comments (post_id, user_id, comment) VALUES (%s,%s,%s)",
                  (post_id, uid, comment))
     cur2.close()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute("SELECT username, profile_pic FROM users WHERE id=%s", (uid,))
     u = cursor.fetchone()
     cursor.execute("SELECT COUNT(*) as cnt FROM post_comments WHERE post_id=%s", (post_id,))
@@ -1342,7 +1266,7 @@ def get_reels():
     if not uid:
         return jsonify({'error': 'Unauthorized'}), 401
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute("""
         SELECT r.*, u.username, u.profile_pic,
                (SELECT COUNT(*) FROM reel_likes rl WHERE rl.reel_id = r.id) as like_count,
@@ -1365,7 +1289,7 @@ def like_reel(reel_id):
     if not uid:
         return jsonify({'error': 'Unauthorized'}), 401
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute("SELECT id FROM reel_likes WHERE reel_id=%s AND user_id=%s", (reel_id, uid))
     existed = cursor.fetchone()
     cur2 = db.cursor()
@@ -1386,7 +1310,7 @@ def delete_reel(reel_id):
     if not uid:
         return jsonify({'error': 'Unauthorized'}), 401
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute("SELECT * FROM reels WHERE id=%s AND user_id=%s", (reel_id, uid))
     reel = cursor.fetchone()
     if not reel:
@@ -1414,7 +1338,7 @@ def get_reel_comments(reel_id):
     if not uid:
         return jsonify({'error': 'Unauthorized'}), 401
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute("""
         SELECT rc.id, rc.user_id, rc.comment, rc.created_at, u.username, u.profile_pic
         FROM reel_comments rc
@@ -1440,7 +1364,7 @@ def post_reel_comment(reel_id):
     if not comment:
         return jsonify({'error': 'Empty comment'}), 400
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute("SELECT id FROM reels WHERE id=%s", (reel_id,))
     if not cursor.fetchone():
         cursor.close()
@@ -1500,7 +1424,7 @@ def get_songs():
     if not uid:
         return jsonify({'error': 'Unauthorized'}), 401
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute("""
         SELECT s.*, u.username, u.profile_pic,
                (SELECT COUNT(*) FROM song_likes sl WHERE sl.song_id = s.id) as like_count,
@@ -1519,7 +1443,7 @@ def like_song(song_id):
     if not uid:
         return jsonify({'error': 'Unauthorized'}), 401
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute("SELECT id FROM song_likes WHERE song_id=%s AND user_id=%s", (song_id, uid))
     existed = cursor.fetchone()
     cur2 = db.cursor()
@@ -1540,7 +1464,7 @@ def delete_song(song_id):
     if not uid:
         return jsonify({'error': 'Unauthorized'}), 401
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute("SELECT * FROM songs WHERE id=%s AND user_id=%s", (song_id, uid))
     song = cursor.fetchone()
     if not song:
@@ -1605,7 +1529,7 @@ def chat():
     if not session.get('user_id'):
         return redirect('/login')
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute("SELECT id, username, profile_pic FROM users WHERE id = %s", (session['user_id'],))
     user = cursor.fetchone()
     cursor.close()
@@ -1629,7 +1553,7 @@ def search_users():
     query = request.args.get('q', '')
 
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
 
     # Exclude users who have blocked me or whom I have blocked
     cursor.execute("""
@@ -1658,7 +1582,7 @@ def recent_chats():
         return jsonify({'error': 'Unauthorized'}), 401
 
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
 
     cursor.execute("""
         SELECT u.id, u.username, u.profile_pic, m.message, m.type AS msg_type, m.timestamp
@@ -1694,7 +1618,7 @@ def get_messages(other_id):
         return jsonify({'error': 'Unauthorized'}), 401
 
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
 
     cursor.execute("""
         SELECT m.* FROM messages m
@@ -1711,9 +1635,8 @@ def get_messages(other_id):
     reactions_map = {}
     if msg_ids:
         ph = ','.join(['%s'] * len(msg_ids))
-        _gc = "STRING_AGG(user_id::TEXT, ',')" if _USE_POSTGRES else "GROUP_CONCAT(user_id)"
         cursor.execute(f"""
-            SELECT message_id, emoji, {_gc} as user_ids, COUNT(*) as cnt
+            SELECT message_id, emoji, GROUP_CONCAT(user_id) as user_ids, COUNT(*) as cnt
             FROM message_reactions
             WHERE message_id IN ({ph})
             GROUP BY message_id, emoji
@@ -1844,7 +1767,7 @@ def handle_incoming_call(data):
       receive the event.  This can look like "all users" when you are
       testing with several tabs of the same account.
 
-    To make the routing bullet‑proof we now look up the target socket id
+    To make the routing bulletâ€‘proof we now look up the target socket id
     from ``online_users`` and emit directly to that socket, and log what
     we're doing for easier debugging.
     """
@@ -1949,7 +1872,7 @@ def handle_delete_message(data):
     if not msg_id:
         return
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute("SELECT * FROM messages WHERE id=%s", (msg_id,))
     msg = cursor.fetchone()
     if not msg or (msg['sender_id'] != uid and msg['receiver_id'] != uid):
@@ -1965,10 +1888,7 @@ def handle_delete_message(data):
             emit('message_deleted', {'message_id': msg_id, 'delete_for': 'everyone'}, room=room)
     else:
         cur2 = db.cursor()
-        _ins_del = "INSERT INTO message_deletions (message_id, user_id) VALUES (%s, %s)"
-        if _USE_POSTGRES:
-            _ins_del += " ON CONFLICT DO NOTHING"
-        cur2.execute(_ins_del, (msg_id, uid))
+        cur2.execute("INSERT IGNORE INTO message_deletions (message_id, user_id) VALUES (%s, %s)", (msg_id, uid))
         db.commit()
         cur2.close()
         emit('message_deleted', {'message_id': msg_id, 'delete_for': 'me'}, room=str(uid))
@@ -1989,7 +1909,7 @@ def handle_react_message(data):
     if not msg_id or not emoji or len(emoji) > 10:
         return
     db = get_db()
-    cursor = get_cursor(db, dictionary=True)
+    cursor = db.cursor(dictionary=True)
     cursor.execute(
         "SELECT id FROM message_reactions WHERE message_id=%s AND user_id=%s AND emoji=%s",
         (msg_id, uid, emoji)
@@ -2014,9 +1934,8 @@ def handle_react_message(data):
                 (msg_row['sender_id'], uid, msg_id, emoji)
             )
     db.commit()
-    _gc2 = "STRING_AGG(user_id::TEXT, ',')" if _USE_POSTGRES else "GROUP_CONCAT(user_id)"
     cursor.execute(f"""
-        SELECT emoji, {_gc2} as user_ids, COUNT(*) as cnt
+        SELECT emoji, GROUP_CONCAT(user_id) as user_ids, COUNT(*) as cnt
         FROM message_reactions WHERE message_id=%s GROUP BY emoji
     """, (msg_id,))
     reactions = []
@@ -2039,22 +1958,23 @@ def handle_react_message(data):
         }, room=room)
 
 ####################################################################
-# HELPER: _do_ai — runs in a background task to avoid blocking gevent
+# HELPER: _do_ai â€” runs in a background task to avoid blocking gevent
 ####################################################################
 def _do_ai(question, sender, receiver, room):
     """Call Gemini (primary) or OpenRouter (fallback) and emit the AI reply."""
     import requests as _req
     from prompts import build_messages, get_puff_local_reply, get_weather_context
 
-    # Intercept identity questions locally — model ignores system prompt for these
+    # Intercept identity questions locally â€” model ignores system prompt for these
     local_reply = get_puff_local_reply(question)
     if local_reply:
         db2 = get_db()
         cur2 = db2.cursor()
-        ai_msg_id = insert_returning_id(cur2,
+        cur2.execute(
             "INSERT INTO messages (sender_id, receiver_id, message, type) VALUES (%s, %s, %s, 'ai')",
             (receiver, sender, local_reply)
         )
+        ai_msg_id = cur2.lastrowid
         cur2.close()
         db2.close()
         socketio.emit('receive_message', {
@@ -2090,15 +2010,16 @@ def _do_ai(question, sender, receiver, room):
             print(f'OpenRouter error: {e}')
 
     if not ai_reply:
-        ai_reply = 'My apologies, Sir — I seem to be momentarily indisposed. Do try again shortly.'
+        ai_reply = 'My apologies, Sir â€” I seem to be momentarily indisposed. Do try again shortly.'
 
     try:
         db2 = get_db()
         cur2 = db2.cursor()
-        ai_msg_id = insert_returning_id(cur2,
+        cur2.execute(
             "INSERT INTO messages (sender_id, receiver_id, message, type) VALUES (%s, %s, %s, 'ai')",
             (receiver, sender, ai_reply)
         )
+        ai_msg_id = cur2.lastrowid
         cur2.close()
         db2.close()
         socketio.emit('receive_message', {
@@ -2169,10 +2090,11 @@ def handle_message(data):
 
     db = get_db()
     cursor = db.cursor()
-    msg_id = insert_returning_id(cursor, """
+    cursor.execute("""
         INSERT INTO messages (sender_id, receiver_id, message, type)
         VALUES (%s, %s, %s, %s)
     """, (sender, receiver, content, msg_type))
+    msg_id = cursor.lastrowid
     db.commit()
     cursor.close()
     db.close()
