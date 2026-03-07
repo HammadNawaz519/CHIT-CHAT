@@ -3,13 +3,11 @@ import random
 import string
 import base64
 import uuid
-import hashlib
 from datetime import datetime, timedelta
 
 from flask import Flask, render_template, request, redirect, session, jsonify, send_from_directory
 from flask_socketio import SocketIO, join_room, leave_room, emit
 from flask_mail import Mail, Message
-from werkzeug.security import generate_password_hash, check_password_hash
 import mysql.connector
 from dotenv import load_dotenv
 
@@ -81,12 +79,6 @@ app.config['MAIL_USE_TLS'] = True
 mail = Mail(app)
 
 # ---------------- HELPERS ----------------
-####################################################################
-# FUNCTION: hash_pass
-####################################################################
-def hash_pass(password):
-    return generate_password_hash(password)
-
 ####################################################################
 # FUNCTION: send_otp
 ####################################################################
@@ -379,29 +371,11 @@ def login():
         cursor.execute("SELECT * FROM users WHERE phone_number=%s", (phone,))
         user = cursor.fetchone()
 
-        if user:
-            stored = user['password']
-            # Detect legacy SHA-256 hash (plain 64-char hex) vs new Werkzeug hash
-            legacy_hash = hashlib.sha256(raw_password.encode()).hexdigest()
-            is_legacy = stored == legacy_hash
-            is_new = (not is_legacy) and check_password_hash(stored, raw_password)
-
-            if is_legacy or is_new:
-                # Migrate legacy hash to secure Werkzeug hash on the fly
-                if is_legacy:
-                    new_hash = generate_password_hash(raw_password)
-                    migrate_cursor = db.cursor()
-                    migrate_cursor.execute(
-                        "UPDATE users SET password=%s WHERE id=%s",
-                        (new_hash, user['id'])
-                    )
-                    db.commit()
-                    migrate_cursor.close()
-
-                cursor.close()
-                db.close()
-                session['user_id'] = user['id']
-                return redirect('/chat')
+        if user and user['password'] == raw_password:
+            cursor.close()
+            db.close()
+            session['user_id'] = user['id']
+            return redirect('/chat')
 
         cursor.close()
         db.close()
@@ -420,7 +394,7 @@ def register():
     username = request.form.get('username')
     phone = request.form.get('phone')
     email = request.form.get('email')
-    password = hash_pass(request.form.get('password'))
+    password = request.form.get('password')
 
     cursor.execute("SELECT * FROM users WHERE email=%s OR phone_number=%s",
                    (email, phone))
