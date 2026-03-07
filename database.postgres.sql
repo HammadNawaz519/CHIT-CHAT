@@ -1,7 +1,7 @@
 -- ============================================================
---  CHIT-CHAT  –  PostgreSQL schema  (Replit deployment)
+--  CHIT-CHAT  –  PostgreSQL schema  (Render / cloud deployment)
 --  Local machine uses MySQL (app.py / database.sql).
---  This file is ONLY for Replit. Do NOT run this locally.
+--  Use this file when deploying to Render or any PostgreSQL-backed host.
 -- ============================================================
 
 -- users

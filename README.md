@@ -292,16 +292,40 @@ gunicorn
 
 ## 🚀 Deployment
 
-1. Set all `.env` variables in your hosting provider's environment config
-2. Run with Gunicorn + Gevent worker (required for Socket.IO)
-3. Use a reverse proxy (Nginx) to handle SSL termination
-4. Ensure WebSocket upgrade headers pass through Nginx:
-   ```nginx
-   proxy_http_version 1.1;
-   proxy_set_header Upgrade $http_upgrade;
-   proxy_set_header Connection "upgrade";
+### Local (Laptop)
+
+```bash
+python app.py
+```
+
+### Render (Production — Free Tier)
+
+1. Push this repo to **GitHub**
+2. Go to [render.com](https://render.com) → **New** → **Web Service**
+3. Connect your GitHub repo
+4. Render will auto-detect the `render.yaml` blueprint. Settings:
+   - **Runtime:** Python
+   - **Build Command:** `pip install -r requirements.txt`
+   - **Start Command:** `gunicorn -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker -w 1 app:app`
+5. Add **Environment Variables** in Render dashboard:
    ```
-5. For WebRTC calls on production: HTTPS is **mandatory** (getUserMedia requires secure context)
+   DB_HOST=your_mysql_host
+   DB_USER=your_db_user
+   DB_PASSWORD=your_db_password
+   DB_NAME=chitchat
+   SECRET_KEY=your_secret_key
+   MAIL_USERNAME=your_gmail@gmail.com
+   MAIL_PASSWORD=your_gmail_app_password
+   OPENROUTER_API_KEY=your_openrouter_key
+   WEATHER_API_KEY=your_openweathermap_key
+   CORS_ORIGINS=https://your-app.onrender.com
+   ```
+6. Click **Deploy** — Render handles the rest
+
+> **Note:** Render's free tier uses a shared MySQL (you'll need an external MySQL host like [FreeSQLDatabase](https://www.freesqldatabase.com/), [PlanetScale](https://planetscale.com/), or [Aiven](https://aiven.io/)).  
+> For PostgreSQL, use `database.postgres.sql` to set up tables and update `app.py` to use `DATABASE_URL`.
+
+> **HTTPS** is provided automatically by Render — required for WebRTC calls.
 
 ---
 

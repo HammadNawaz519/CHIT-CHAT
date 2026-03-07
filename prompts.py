@@ -64,6 +64,86 @@ Keep the greeting to one or two sentences — do not ramble.
 
 
 import re as _re
+import os as _os
+
+# ---------------------------------------------------------------------------
+# Weather helper — fetches live data from OpenWeatherMap and returns a short
+# context string that gets injected into the prompt before Puff answers.
+# ---------------------------------------------------------------------------
+_WEATHER_PATTERN = _re.compile(
+    r"weather\s+(?:in|for|at|of)\s+([a-zA-Z][a-zA-Z ]*?)(?=[?,!.]|$)",
+    _re.IGNORECASE
+)
+_WEATHER_CITY_BEFORE = _re.compile(
+    r"([a-zA-Z]+(?:\s+[a-zA-Z]+)?)\s+weather",
+    _re.IGNORECASE
+)
+_NON_CITY_WORDS = {'the', 'is', 'me', 'tell', 'what', 'check', 'get', 'know',
+                   'about', 'current', 'today', 'now', 'please', 'can', 'you'}
+
+
+def _extract_city(question: str) -> str | None:
+    # "weather in/for/at/of CITY"
+    m = _WEATHER_PATTERN.search(question)
+    if m:
+        city = m.group(1).strip()
+        # Strip trailing non-city words (e.g. "today", "now", "please")
+        words = city.split()
+        while words and words[-1].lower() in _NON_CITY_WORDS:
+            words.pop()
+        city = " ".join(words)
+        if city:
+            return city
+    # "CITY weather" — grab the 1-2 words immediately before "weather"
+    m = _WEATHER_CITY_BEFORE.search(question)
+    if m:
+        # Take only the last 1-2 words of the matched group so "tell me Paris" → "Paris"
+        words = m.group(1).strip().split()
+        for length in (2, 1):
+            candidate = " ".join(words[-length:])
+            if not any(w in _NON_CITY_WORDS for w in candidate.lower().split()):
+                return candidate
+    return None
+
+
+def get_weather_context(question: str) -> str | None:
+    """
+    If the question is about weather, fetch live data and return a context
+    string like 'Current weather in London: 12°C, overcast clouds, humidity 78%.'
+    Returns None if not a weather question or the API call fails.
+    """
+    q = question.lower()
+    if "weather" not in q:
+        return None
+    city = _extract_city(question)
+    if not city:
+        return None
+    api_key = _os.getenv("WEATHER_API_KEY")
+    if not api_key:
+        return None
+    try:
+        import requests as _req
+        resp = _req.get(
+            "https://api.openweathermap.org/data/2.5/weather",
+            params={"q": city, "appid": api_key, "units": "metric"},
+            timeout=10,
+        )
+        if resp.status_code != 200:
+            return None
+        d = resp.json()
+        temp = d["main"]["temp"]
+        feels = d["main"]["feels_like"]
+        humidity = d["main"]["humidity"]
+        desc = d["weather"][0]["description"]
+        name = d["name"]
+        country = d["sys"].get("country", "")
+        return (
+            f"[LIVE WEATHER DATA] {name}, {country}: "
+            f"{temp:.1f}°C (feels like {feels:.1f}°C), {desc}, humidity {humidity}%."
+        )
+    except Exception:
+        return None
+
 
 # Patterns that models like perplexity/sonar always answer from their own training
 # regardless of the system prompt — we intercept these locally.
@@ -100,13 +180,19 @@ def get_puff_local_reply(question: str) -> str | None:
     return None
 
 
-def build_messages(question: str) -> list:
+def build_messages(question: str, weather_context: str | None = None) -> list:
     """
     Returns the messages array to send to the model.
-    Sends AGENT_INSTRUCTION as the system role so Puff's persona
-    shapes tone, length, and formatting for every answer.
+    Merges the system instruction into the user turn so models that
+    don't support the 'system' role (e.g. Gemma) work correctly.
+    If weather_context is provided it is injected before the question so
+    Puff can answer with real live data.
     """
+    if weather_context:
+        user_content = f"{question.strip()}\n\n{weather_context}"
+    else:
+        user_content = question.strip()
+    combined = f"{AGENT_INSTRUCTION.strip()}\n\nUser: {user_content}\nPuff:"
     return [
-        {"role": "system", "content": AGENT_INSTRUCTION.strip()},
-        {"role": "user",   "content": question.strip()},
+        {"role": "user", "content": combined},
     ]
