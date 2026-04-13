@@ -17,7 +17,7 @@ static/uploads/
 
 # OS files
 .DS_Store
-Thumbs.db
+Thumbs.db 
 
 # IDE
 .vscode/
