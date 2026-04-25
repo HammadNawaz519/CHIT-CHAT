@@ -2211,17 +2211,38 @@ def handle_call_ended(data):
 
 # -------- RUN --------
 if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
+    configured_port = os.environ.get("PORT")
+    port = int(configured_port or 5000)
     debug_mode = os.getenv("FLASK_DEBUG", "false").lower() == "true"
     host = os.getenv("HOST", "0.0.0.0")
-    print(f"* Open: http://127.0.0.1:{port}  (or http://localhost:{port})", flush=True)
-    try:
-        socketio.run(
-            app,
-            host=host,
-            port=port,
-            debug=debug_mode,
-            allow_unsafe_werkzeug=debug_mode,
-        )
-    except KeyboardInterrupt:
-        print("\n* Server stopped.", flush=True)
+
+    def _is_address_in_use(exc: OSError) -> bool:
+        if getattr(exc, "winerror", None) == 10048:
+            return True
+        if getattr(exc, "errno", None) in (48, 98):
+            return True
+        msg = str(exc).lower()
+        return "address already in use" in msg or "only one usage" in msg
+
+    max_attempts = 20 if configured_port is None else 1
+    for _ in range(max_attempts):
+        print(f"* Open: http://127.0.0.1:{port}  (or http://localhost:{port})", flush=True)
+        try:
+            socketio.run(
+                app,
+                host=host,
+                port=port,
+                debug=debug_mode,
+                allow_unsafe_werkzeug=debug_mode,
+            )
+            break
+        except KeyboardInterrupt:
+            print("\n* Server stopped.", flush=True)
+            break
+        except OSError as e:
+            # Only auto-shift local default ports; explicit PORT values should fail loudly.
+            if configured_port is None and _is_address_in_use(e):
+                print(f"* Port {port} is busy. Retrying on {port + 1}...", flush=True)
+                port += 1
+                continue
+            raise
